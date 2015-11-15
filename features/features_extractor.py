@@ -1,47 +1,6 @@
 from collections import OrderedDict
-
 import pandas as pd
 from scipy import sparse
-
-
-class FeatureSet:
-    def __init__(self):
-        pass
-
-    def generate_features(self, data_set, features):
-        raise NotImplementedError()
-
-    def _rewrite(self, data_set, features, features_names, data_type):
-        for f_name in features_names:
-            features[f_name] = data_set[f_name].astype(data_type)
-
-
-class BasicFeatureSet(FeatureSet):
-    def generate_features(self, data_set, features):
-        self._rewrite(data_set, features, [
-            "Promo",
-            "Promo2",
-            "Promo2SinceWeek",
-            "Promo2SinceYear",
-            "CompetitionDistance",
-            "CompetitionOpenSinceMonth",
-            "CompetitionOpenSinceYear",
-            "SchoolHoliday",
-            "Store"
-        ], data_type=float)
-        self._rewrite(data_set, features, [
-            "DayOfWeek",
-            "StoreType",
-            "Assortment",
-            "StateHoliday"
-        ], data_type="category")
-
-
-class DateFeatureSet(FeatureSet):
-    def generate_features(self, data_set, features):
-        features["Year"] = data_set.Date.apply(lambda x: x.split('-')[0]).astype("category")
-        features["Month"] = data_set.Date.apply(lambda x: x.split('-')[1]).astype("category")
-        features["Day"] = data_set.Date.apply(lambda x: x.split('-')[2]).astype("category")
 
 
 class FeaturesExtractor:
@@ -105,5 +64,3 @@ class FeaturesExtractor:
                 quantitative_columns.append(column)
 
         return categorical_columns, quantitative_columns
-
-

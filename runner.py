@@ -1,14 +1,16 @@
 import argparse
+import numpy as np
 from os import path
 
-import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn import cross_validation
 
-from cross_validation import non_random_train_test_split
-from features import FeaturesExtractor, BasicFeatureSet, DateFeatureSet
-
+from features.basic_feature_set import BasicFeatureSet
+from features.competition_feature_set import CompetitionFeatureSet
+from features.date_feature_set import DateFeatureSet
+from features.features_extractor import FeaturesExtractor
+from features.promotion_feature_set import PromotionFeatureSet
+from helpers.cross_validation import non_random_train_test_split
 
 # params = {
 #     "objective": "reg:linear",
@@ -33,6 +35,7 @@ params = {
     "seed": 1301
 }
 round_num = 1400
+validation_set_size = 0.012
 
 
 def rmspe(yhat, y):
@@ -69,8 +72,8 @@ def learning(features_extractor, training_set):
     training_set = training_set.loc[training_set["Sales"] > 0]
 
     print "Splitting data set..."
-    # train, valid = non_random_train_test_split(training_set, test_size=0.0388)
-    train, valid = cross_validation.train_test_split(training_set, test_size=0.012, random_state=10)
+    train, valid = non_random_train_test_split(training_set, test_size=validation_set_size)
+    # train, valid = cross_validation.train_test_split(training_set, test_size=0.012, random_state=10)
 
     print "Extracting features..."
     train_x, train_names = features_extractor.extract(train)
@@ -102,6 +105,7 @@ def prediction(out_prediction_path, model, feature_names, features_extractor, te
     print ">> PREDICTION"
 
     test_set.loc[test_set.Open.isnull(), 'Open'] = 1
+    test_set.fillna(0, inplace=True)
 
     print "Extracting features..."
     test_x, _ = features_extractor.extract(test_set, feature_names=feature_names)
@@ -115,16 +119,18 @@ def prediction(out_prediction_path, model, feature_names, features_extractor, te
 
 
 def run(out_prediction_path, train_path, test_path, store_path):
-    training_set = pd.read_csv(train_path)
-    test_set = pd.read_csv(test_path)
+    training_set = pd.read_csv(train_path, parse_dates=[2])
+    test_set = pd.read_csv(test_path, parse_dates=[3])
     store = pd.read_csv(store_path)
 
-    training_set = pd.merge(training_set, store, on="Store")
-    test_set = pd.merge(test_set, store, on="Store")
+    training_set = pd.merge(training_set, store, on="Store", how='left')
+    test_set = pd.merge(test_set, store, on="Store", how='left')
 
     features_extractor = FeaturesExtractor()
     features_extractor.add_feature_set(BasicFeatureSet())
     features_extractor.add_feature_set(DateFeatureSet())
+    features_extractor.add_feature_set(CompetitionFeatureSet())
+    features_extractor.add_feature_set(PromotionFeatureSet())
 
     model, feature_names = learning(features_extractor, training_set)
     prediction(out_prediction_path, model, feature_names, features_extractor, test_set)
