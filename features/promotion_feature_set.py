@@ -23,5 +23,4 @@ class PromotionFeatureSet(FeatureSet):
                     correct_interval = data_set.PromoInterval == interval
                     promo_started = features.PromoStarted
                     features.loc[promo_month & correct_interval & promo_started, "IsPromoMonth"] = 1
-                    features.loc[promo_month & correct_interval, "IsPromoMonth"] = 1
         features.drop("PromoStarted", 1)
