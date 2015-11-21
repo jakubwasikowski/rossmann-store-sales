@@ -34,7 +34,7 @@ params = {
     "silent": 1,
     "seed": 1301
 }
-round_num = 1400
+round_num = 10000
 validation_set_size = 0.012
 
 
@@ -88,7 +88,7 @@ def learning(features_extractor, training_set):
     d_train = xgb.DMatrix(train_x, label=np.log1p(train_y))
     d_valid = xgb.DMatrix(valid_x, label=np.log1p(valid_y))
 
-    watch_list = [(d_valid, 'eval'), (d_train, 'train')]
+    watch_list = [(d_train, 'train'), (d_valid, 'eval')]
     model = xgb.train(params, d_train, round_num, evals=watch_list, early_stopping_rounds=200, feval=rmspe_xg)
 
     print("Validating...")
