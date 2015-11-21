@@ -1,9 +1,11 @@
 import argparse
 import numpy as np
-from os import path
+from os import path, makedirs
 
 import pandas as pd
 import xgboost as xgb
+from sklearn import cross_validation
+from sklearn.externals import joblib
 
 from features.basic_feature_set import BasicFeatureSet
 from features.competition_feature_set import CompetitionFeatureSet
@@ -11,6 +13,10 @@ from features.date_feature_set import DateFeatureSet
 from features.features_extractor import FeaturesExtractor
 from features.promotion_feature_set import PromotionFeatureSet
 from helpers.cross_validation import non_random_train_test_split
+
+test_filename = 'test.csv'
+train_filename = 'train.csv'
+store_filename = 'store.csv'
 
 # params = {
 #     "objective": "reg:linear",
@@ -35,7 +41,9 @@ params = {
     "seed": 1301
 }
 round_num = 10000
-validation_set_size = 0.012
+
+eval_and_test_set_size = 0.2
+submission_eval_set_size = 0.012
 
 
 def rmspe(yhat, y):
@@ -65,43 +73,49 @@ def rmspe_xg(yhat, y):
 #     print error
 
 
-def learning(features_extractor, training_set):
+def learning(create_submission, features_extractor, training_set):
     print ">> LEARNING"
 
     training_set.fillna(0, inplace=True)
     training_set = training_set.loc[training_set["Sales"] > 0]
 
     print "Splitting data set..."
-    train, valid = non_random_train_test_split(training_set, test_size=validation_set_size)
-    # train, valid = cross_validation.train_test_split(training_set, test_size=0.012, random_state=10)
+    if create_submission:
+        train, valid = non_random_train_test_split(training_set, test_size=submission_eval_set_size)
+    else:
+        train, valid = non_random_train_test_split(training_set, test_size=eval_and_test_set_size)
+        valid, test = cross_validation.train_test_split(valid, test_size=0.5, random_state=10)
 
     print "Extracting features..."
     train_x, train_names = features_extractor.extract(train)
     train_y = train.Sales
+    d_train = xgb.DMatrix(train_x, label=np.log1p(train_y))
 
     valid_x, _ = features_extractor.extract(valid, feature_names=train_names)
     valid_y = valid.Sales
+    d_valid = xgb.DMatrix(valid_x, label=np.log1p(valid_y))
 
     print "Feature names: %s" % ', '.join(train_names)
-
     print "Training xgboost..."
-    d_train = xgb.DMatrix(train_x, label=np.log1p(train_y))
-    d_valid = xgb.DMatrix(valid_x, label=np.log1p(valid_y))
 
     watch_list = [(d_train, 'train'), (d_valid, 'eval')]
     model = xgb.train(params, d_train, round_num, evals=watch_list, early_stopping_rounds=200, feval=rmspe_xg)
 
-    print("Validating...")
-    train_probs = model.predict(xgb.DMatrix(valid_x))
-    indices = train_probs < 0
-    train_probs[indices] = 0
-    error = rmspe(np.expm1(train_probs), valid_y.values)
-    print "RMSPE error: %f" % error
+    if create_submission is False:
+        print("Validating...")
+        test_x, _ = features_extractor.extract(test, feature_names=train_names)
+        test_y = test.Sales
+
+        train_probs = model.predict(xgb.DMatrix(test_x))
+        indices = train_probs < 0
+        train_probs[indices] = 0
+        error = rmspe(np.expm1(train_probs), test_y.values)
+        print "RMSPE error: %f" % error
 
     return model, train_names
 
 
-def prediction(out_prediction_path, model, feature_names, features_extractor, test_set):
+def prediction(output_dir_path, model, feature_names, features_extractor, test_set):
     print ">> PREDICTION"
 
     test_set.loc[test_set.Open.isnull(), 'Open'] = 1
@@ -115,10 +129,18 @@ def prediction(out_prediction_path, model, feature_names, features_extractor, te
     indices = test_probs < 0
     test_probs[indices] = 0
     submission = pd.DataFrame({"Id": test_set["Id"], "Sales": np.expm1(test_probs)})
-    submission.to_csv(out_prediction_path, index=False)
+    submission.to_csv(path.join(output_dir_path, "predictions.csv"), index=False)
+    joblib.dump(model, path.join(output_dir_path, "xgb_model.pkl"))
 
 
-def run(out_prediction_path, train_path, test_path, store_path):
+def run(input_dir_path, output_dir_path):
+
+    create_submission = True if output_dir_path is not None else False
+
+    train_path = path.join(input_dir_path, train_filename)
+    test_path = path.join(input_dir_path, test_filename)
+    store_path = path.join(input_dir_path, store_filename)
+
     training_set = pd.read_csv(train_path, parse_dates=[2])
     test_set = pd.read_csv(test_path, parse_dates=[3])
     store = pd.read_csv(store_path)
@@ -132,18 +154,19 @@ def run(out_prediction_path, train_path, test_path, store_path):
     features_extractor.add_feature_set(CompetitionFeatureSet())
     features_extractor.add_feature_set(PromotionFeatureSet())
 
-    model, feature_names = learning(features_extractor, training_set)
-    prediction(out_prediction_path, model, feature_names, features_extractor, test_set)
+    model, feature_names = learning(create_submission, features_extractor, training_set)
+    if create_submission:
+        prediction(output_dir_path, model, feature_names, features_extractor, test_set)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("output_dir")
-    parser.add_argument("input_dir")
+    parser.add_argument("--input_dir", default="data")
+    parser.add_argument("--output_dir")
 
     args = parser.parse_args()
 
-    run(out_prediction_path=path.join(args.output_dir, "predictions.csv"),
-        train_path=path.join(args.input_dir, "train.csv"),
-        test_path=path.join(args.input_dir, "test.csv"),
-        store_path=path.join(args.input_dir, "store.csv"))
+    if args.output_dir is not None and not path.exists(args.output_dir):
+        makedirs(args.output_dir)
+
+    run(input_dir_path=args.input_dir, output_dir_path=args.output_dir)
