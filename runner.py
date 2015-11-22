@@ -10,6 +10,7 @@ from sklearn.externals import joblib
 from features.basic_feature_set import BasicFeatureSet
 from features.competition_feature_set import CompetitionFeatureSet
 from features.date_feature_set import DateFeatureSet
+from features.days_number import DaysNumber
 from features.features_extractor import FeaturesExtractor
 from features.promotion_feature_set import PromotionFeatureSet
 from helpers.cross_validation import non_random_train_test_split
@@ -17,17 +18,8 @@ from helpers.cross_validation import non_random_train_test_split
 test_filename = 'test.csv'
 train_filename = 'train.csv'
 store_filename = 'store.csv'
-
-# params = {
-#     "objective": "reg:linear",
-#     "eta": 0.2,
-#     "min_child_weight": 4,
-#     "gamma": 5.0,
-#     "max_depth": 8,
-#     "subsample": 1.0,
-#     "colsample_bytree": 1.0,
-#     "silent": 1
-# }
+state_holidays_filename = 'state_holidays.csv'
+store_states_filename = 'store_states.csv'
 
 params = {
     "objective": "reg:linear",
@@ -133,13 +125,15 @@ def prediction(output_dir_path, model, feature_names, features_extractor, test_s
     joblib.dump(model, path.join(output_dir_path, "xgb_model.pkl"))
 
 
-def run(input_dir_path, output_dir_path):
+def run(input_dir_path, external_dir_path, output_dir_path):
 
     create_submission = True if output_dir_path is not None else False
 
     train_path = path.join(input_dir_path, train_filename)
     test_path = path.join(input_dir_path, test_filename)
     store_path = path.join(input_dir_path, store_filename)
+    store_states_path = path.join(external_dir_path, store_states_filename)
+    state_holidays_path = path.join(external_dir_path, state_holidays_filename)
 
     training_set = pd.read_csv(train_path, parse_dates=[2])
     test_set = pd.read_csv(test_path, parse_dates=[3])
@@ -153,6 +147,7 @@ def run(input_dir_path, output_dir_path):
     features_extractor.add_feature_set(DateFeatureSet())
     features_extractor.add_feature_set(CompetitionFeatureSet())
     features_extractor.add_feature_set(PromotionFeatureSet())
+    features_extractor.add_feature_set(DaysNumber(store_states_path, state_holidays_path))
 
     model, feature_names = learning(create_submission, features_extractor, training_set)
     if create_submission:
@@ -162,6 +157,7 @@ def run(input_dir_path, output_dir_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_dir", default="data")
+    parser.add_argument("--external_dir", default="external")
     parser.add_argument("--output_dir")
 
     args = parser.parse_args()
@@ -169,4 +165,4 @@ if __name__ == "__main__":
     if args.output_dir is not None and not path.exists(args.output_dir):
         makedirs(args.output_dir)
 
-    run(input_dir_path=args.input_dir, output_dir_path=args.output_dir)
+    run(input_dir_path=args.input_dir, external_dir_path=args.external_dir, output_dir_path=args.output_dir)
