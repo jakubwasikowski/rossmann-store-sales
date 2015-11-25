@@ -68,9 +68,6 @@ def rmspe_xg(yhat, y):
 def learning(create_submission, features_extractor, training_set):
     print ">> LEARNING"
 
-    training_set.fillna(0, inplace=True)
-    training_set = training_set.loc[training_set["Sales"] > 0]
-
     print "Splitting data set..."
     if create_submission:
         train, valid = non_random_train_test_split(training_set, test_size=submission_eval_set_size)
@@ -110,9 +107,6 @@ def learning(create_submission, features_extractor, training_set):
 def prediction(output_dir_path, model, feature_names, features_extractor, test_set):
     print ">> PREDICTION"
 
-    test_set.loc[test_set.Open.isnull(), 'Open'] = 1
-    test_set.fillna(0, inplace=True)
-
     print "Extracting features..."
     test_x, _ = features_extractor.extract(test_set, feature_names=feature_names)
 
@@ -123,6 +117,16 @@ def prediction(output_dir_path, model, feature_names, features_extractor, test_s
     submission = pd.DataFrame({"Id": test_set["Id"], "Sales": np.expm1(test_probs)})
     submission.to_csv(path.join(output_dir_path, "predictions.csv"), index=False)
     joblib.dump(model, path.join(output_dir_path, "xgb_model.pkl"))
+
+
+def preprocess(training_set, test_set):
+    training_set.fillna(0, inplace=True)
+    training_set = training_set.loc[training_set["Sales"] > 0]
+
+    test_set.loc[test_set.Open.isnull(), 'Open'] = 1
+    test_set.fillna(0, inplace=True)
+
+    return training_set, test_set
 
 
 def run(input_dir_path, external_dir_path, output_dir_path):
@@ -149,6 +153,7 @@ def run(input_dir_path, external_dir_path, output_dir_path):
     features_extractor.add_feature_set(PromotionFeatureSet())
     features_extractor.add_feature_set(DaysNumber(store_states_path, state_holidays_path))
 
+    training_set, test_set = preprocess(training_set, test_set)
     model, feature_names = learning(create_submission, features_extractor, training_set)
     if create_submission:
         prediction(output_dir_path, model, feature_names, features_extractor, test_set)
