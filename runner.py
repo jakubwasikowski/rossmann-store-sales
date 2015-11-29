@@ -65,7 +65,7 @@ def rmspe_xg(yhat, y):
 #     print error
 
 
-def learning(create_submission, features_extractor, training_set):
+def learning(create_submission, features_extractor, training_set, preds_per_store_path=None):
     print ">> LEARNING"
 
     print "Splitting data set..."
@@ -75,11 +75,12 @@ def learning(create_submission, features_extractor, training_set):
         train, valid = non_random_train_test_split(training_set, test_size=eval_and_test_set_size)
         valid, test = cross_validation.train_test_split(valid, test_size=0.5, random_state=10)
 
-    print "Extracting features..."
+    print "Extracting features for training set..."
     train_x, train_names = features_extractor.extract(train)
     train_y = train.Sales
     d_train = xgb.DMatrix(train_x, label=np.log1p(train_y))
 
+    print "Extracting features for validation set..."
     valid_x, _ = features_extractor.extract(valid, feature_names=train_names)
     valid_y = valid.Sales
     d_valid = xgb.DMatrix(valid_x, label=np.log1p(valid_y))
@@ -101,7 +102,31 @@ def learning(create_submission, features_extractor, training_set):
         error = rmspe(np.expm1(train_probs), test_y.values)
         print "RMSPE error: %f" % error
 
+    if preds_per_store_path is not None:
+        save_predictions_per_store(output_dir=preds_per_store_path,
+                                   train_set=train,
+                                   train_features=train_x,
+                                   valid_set=valid,
+                                   valid_features=valid_x,
+                                   model=model)
+
     return model, train_names
+
+
+def save_predictions_per_store(output_dir, train_set, train_features, valid_set, valid_features, model):
+    print ">> SAVING PREDICTIONS PER STORE"
+    train = pd.DataFrame(train_set)
+    train["PredSales"] = np.expm1(model.predict(xgb.DMatrix(train_features)))
+    valid = pd.DataFrame(valid_set)
+    valid["PredSales"] = np.expm1(model.predict(xgb.DMatrix(valid_features)))
+
+    train = train.iloc[::-1]
+    valid = valid.iloc[::-1]
+
+    for store in train.Store.unique():
+        df = train[train.Store == store].append(valid[valid.Store == store])
+        output_path = path.join(output_dir, "store_%s.csv" % store)
+        df[["Store", "Open", "Promo", "Date", "Sales", "PredSales"]].to_csv(output_path, index=False)
 
 
 def prediction(output_dir_path, model, feature_names, features_extractor, test_set):
@@ -129,7 +154,7 @@ def preprocess(training_set, test_set):
     return training_set, test_set
 
 
-def run(input_dir_path, external_dir_path, output_dir_path):
+def run(input_dir_path, external_dir_path, output_dir_path, preds_per_store_path):
 
     create_submission = True if output_dir_path is not None else False
 
@@ -154,7 +179,7 @@ def run(input_dir_path, external_dir_path, output_dir_path):
     features_extractor.add_feature_set(DaysNumber(store_states_path, state_holidays_path))
 
     training_set, test_set = preprocess(training_set, test_set)
-    model, feature_names = learning(create_submission, features_extractor, training_set)
+    model, feature_names = learning(create_submission, features_extractor, training_set, preds_per_store_path)
     if create_submission:
         prediction(output_dir_path, model, feature_names, features_extractor, test_set)
 
@@ -164,10 +189,14 @@ if __name__ == "__main__":
     parser.add_argument("--input_dir", default="data")
     parser.add_argument("--external_dir", default="external")
     parser.add_argument("--output_dir")
+    parser.add_argument("--preds_per_store_dir")
 
     args = parser.parse_args()
 
     if args.output_dir is not None and not path.exists(args.output_dir):
         makedirs(args.output_dir)
 
-    run(input_dir_path=args.input_dir, external_dir_path=args.external_dir, output_dir_path=args.output_dir)
+    run(input_dir_path=args.input_dir,
+        external_dir_path=args.external_dir,
+        output_dir_path=args.output_dir,
+        preds_per_store_path=args.preds_per_store_dir)

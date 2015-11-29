@@ -15,12 +15,14 @@ class FeaturesExtractor:
         return self._to_sparse_structure(feature_set, feature_names)
 
     def _generate_feature_set(self, data_set):
+        print "Generating features..."
         feature_set = pd.DataFrame(index=data_set.index)
         for fs_gen in self._feature_set_generators:
             fs_gen.generate_features(data_set, feature_set)
         return feature_set
 
     def _to_sparse_structure(self, feature_set, feature_names):
+        print "Converting to sparse structure..."
         categorical_columns, quantitative_columns = self._get_columns(feature_set)
 
         row = []
@@ -33,6 +35,8 @@ class FeaturesExtractor:
 
         rows_no = 0
         for fs_index, fs_row in feature_set.iterrows():
+            if (rows_no + 1) % 10000 == 0:
+                print "Percentage of converted rows: %.1f%%" % (float(rows_no) * 100 / len(feature_set))
             for q_col in quantitative_columns:
                 self._update_feature_indexes(features_indexes, q_col)
                 row.append(rows_no)

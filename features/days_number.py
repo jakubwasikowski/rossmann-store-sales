@@ -30,7 +30,7 @@ class DaysNumber(FeatureSet):
         step = 0
         cache = pylru.lrucache(10000)
         for index, store, timestamp in data_set[["Store", "Date"]].itertuples():
-            if (step + 1) % 1000 == 0:
+            if (step + 1) % 10000 == 0:
                 print "Percentage of analyzed rows: %.1f%%" % (float(step) * 100 / row_no)
             for h_name, h_dates in holidays_per_store[store].iteritems():
                 if h_dates:
