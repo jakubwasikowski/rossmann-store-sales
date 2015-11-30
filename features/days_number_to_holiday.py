@@ -5,7 +5,7 @@ import pylru
 from features.feature_set import FeatureSet
 
 
-class DaysNumber(FeatureSet):
+class DaysNumberToHoliday(FeatureSet):
     def __init__(self, store_states_path, state_holidays_path):
         FeatureSet.__init__(self)
         self.store_states_path = store_states_path
@@ -21,8 +21,8 @@ class DaysNumber(FeatureSet):
     def _initialize_new_columns(self, data_set, holidays_names):
         new_columns = {}
         for h_name in holidays_names:
-            new_columns["%sPastHoliday" % h_name] = [sys.maxint] * len(data_set)
-            new_columns["%sFutureHoliday" % h_name] = [sys.maxint] * len(data_set)
+            new_columns["%sPastHoliday" % h_name] = [0] * len(data_set)
+            new_columns["%sFutureHoliday" % h_name] = [0] * len(data_set)
         return new_columns
 
     def _calculate_days_intervals_for_holidays(self, data_set, holidays_per_store, new_columns):
@@ -31,15 +31,15 @@ class DaysNumber(FeatureSet):
         cache = pylru.lrucache(10000)
         for index, store, timestamp in data_set[["Store", "Date"]].itertuples():
             if (step + 1) % 10000 == 0:
-                print "Percentage of analyzed rows: %.1f%%" % (float(step) * 100 / row_no)
+                print "Days number to holiday: %.1f%%" % (float(step) * 100 / row_no)
             for h_name, h_dates in holidays_per_store[store].iteritems():
                 if h_dates:
                     if (timestamp, h_dates) in cache:
                         min_past_interval, min_future_interval = cache[(timestamp, h_dates)]
                     else:
-                        past_intervals = [(timestamp - h_date).days for h_date in h_dates if timestamp >= h_date]
+                        past_intervals = [(timestamp - h_date).days + 1 for h_date in h_dates if timestamp >= h_date]
                         min_past_interval = min(past_intervals) if past_intervals else None
-                        future_intervals = [(h_date - timestamp).days for h_date in h_dates if timestamp <= h_date]
+                        future_intervals = [(h_date - timestamp).days + 1 for h_date in h_dates if timestamp <= h_date]
                         min_future_interval = min(future_intervals) if future_intervals else None
                         cache[(timestamp, h_dates)] = (min_past_interval, min_future_interval)
                     if min_past_interval is not None:

@@ -10,8 +10,9 @@ from sklearn.externals import joblib
 from features.basic_feature_set import BasicFeatureSet
 from features.competition_feature_set import CompetitionFeatureSet
 from features.date_feature_set import DateFeatureSet
-from features.days_number import DaysNumber
+from features.days_number_to_holiday import DaysNumberToHoliday
 from features.features_extractor import FeaturesExtractor
+from features.promotion_days_number import PromotionDaysNumber
 from features.promotion_feature_set import PromotionFeatureSet
 from helpers.cross_validation import non_random_train_test_split
 
@@ -176,7 +177,8 @@ def run(input_dir_path, external_dir_path, output_dir_path, preds_per_store_path
     features_extractor.add_feature_set(DateFeatureSet())
     features_extractor.add_feature_set(CompetitionFeatureSet())
     features_extractor.add_feature_set(PromotionFeatureSet())
-    features_extractor.add_feature_set(DaysNumber(store_states_path, state_holidays_path))
+    features_extractor.add_feature_set(DaysNumberToHoliday(store_states_path, state_holidays_path))
+    features_extractor.add_feature_set(PromotionDaysNumber(training_set, test_set))
 
     training_set, test_set = preprocess(training_set, test_set)
     model, feature_names = learning(create_submission, features_extractor, training_set, preds_per_store_path)
