@@ -15,6 +15,7 @@ from features.features_extractor import FeaturesExtractor
 from features.promotion_days_number import PromotionDaysNumber
 from features.promotion_feature_set import PromotionFeatureSet
 from helpers.cross_validation import non_random_train_test_split
+from helpers.feature_importance import plot_feature_importance
 
 test_filename = 'test.csv'
 train_filename = 'train.csv'
@@ -77,16 +78,16 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
         valid, test = cross_validation.train_test_split(valid, test_size=0.5, random_state=10)
 
     print "Extracting features for training set..."
-    train_x, train_names = features_extractor.extract(train)
+    train_x, feature_names = features_extractor.extract(train)
     train_y = train.Sales
     d_train = xgb.DMatrix(train_x, label=np.log1p(train_y))
 
     print "Extracting features for validation set..."
-    valid_x, _ = features_extractor.extract(valid, feature_names=train_names)
+    valid_x, _ = features_extractor.extract(valid, feature_names=feature_names)
     valid_y = valid.Sales
     d_valid = xgb.DMatrix(valid_x, label=np.log1p(valid_y))
 
-    print "Feature names: %s" % ', '.join(train_names)
+    print "Feature names: %s" % ', '.join(feature_names)
     print "Training xgboost..."
 
     watch_list = [(d_train, 'train'), (d_valid, 'eval')]
@@ -94,7 +95,7 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
 
     if create_submission is False:
         print("Validating...")
-        test_x, _ = features_extractor.extract(test, feature_names=train_names)
+        test_x, _ = features_extractor.extract(test, feature_names=feature_names)
         test_y = test.Sales
 
         train_probs = model.predict(xgb.DMatrix(test_x))
@@ -111,7 +112,7 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
                                    valid_features=valid_x,
                                    model=model)
 
-    return model, train_names
+    return model, feature_names
 
 
 def save_predictions_per_store(output_dir, train_set, train_features, valid_set, valid_features, model):
@@ -182,6 +183,7 @@ def run(input_dir_path, external_dir_path, output_dir_path, preds_per_store_path
 
     training_set, test_set = preprocess(training_set, test_set)
     model, feature_names = learning(create_submission, features_extractor, training_set, preds_per_store_path)
+    plot_feature_importance(model, feature_names)
     if create_submission:
         prediction(output_dir_path, model, feature_names, features_extractor, test_set)
 
