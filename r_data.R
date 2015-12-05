@@ -37,7 +37,7 @@ test$Month <- as.integer(format(as.Date(test$Date), "%m"))
 test$Year <- as.integer(format(as.Date(test$Date), "%y"))
 test$Day <- as.integer(format(as.Date(test$Date), "%d"))
 
-feature.names <- names(train)[c(1,2,5:20)]
+feature.names <- names(train)[c(1,2,6:21)]
 cat("Feature Names\n")
 feature.names
 
