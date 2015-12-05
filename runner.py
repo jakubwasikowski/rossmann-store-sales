@@ -17,24 +17,22 @@ from features.promotion_feature_set import PromotionFeatureSet
 from helpers.cross_validation import non_random_train_test_split
 from helpers.feature_importance import plot_feature_importance
 
-test_filename = 'test.csv'
-train_filename = 'train.csv'
-store_filename = 'store.csv'
+test_filename = 'R_test_transformed.csv'
+train_filename = 'R_train_transformed.csv'
 state_holidays_filename = 'state_holidays.csv'
 store_states_filename = 'store_states.csv'
 
 params = {
     "objective": "reg:linear",
     "booster": "gbtree",
-    "eta": 0.1,
+    "eta": 0.02,
     "max_depth": 10,
-    "subsample": 0.85,
-    "colsample_bytree": 0.4,
-    "min_child_weight": 6,
+    "subsample": 0.9,
+    "colsample_bytree": 0.7,
     "silent": 1,
     "seed": 1301
 }
-round_num = 10000
+round_num = 3000
 
 eval_and_test_set_size = 0.2
 submission_eval_set_size = 0.012
@@ -48,23 +46,6 @@ def rmspe_xg(yhat, y):
     y = np.expm1(y.get_label())
     yhat = np.expm1(yhat)
     return "rmspe", rmspe(yhat, y)
-
-
-# def median(training_set):
-#     columns = ['Store', 'DayOfWeek', 'Promo']
-#
-#     x_train, x_test, y_train, y_test = non_random_train_test_split(training_set, training_set.Sales, test_size=0.0388)
-#
-#     medians = x_train.groupby(columns)['Sales'].median()
-#     medians = medians.reset_index()
-#
-#     test2 = pd.merge(x_test, medians, on=columns, how='left')
-#     assert(len(test2) == len(x_test))
-#
-#     test2.loc[test2.Open == 0, 'Sales'] = 0
-#
-#     error = calc_rmspe(test2.Sales.values, y_test.values)
-#     print error
 
 
 def learning(create_submission, features_extractor, training_set, preds_per_store_path=None):
@@ -91,7 +72,7 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
     print "Training xgboost..."
 
     watch_list = [(d_train, 'train'), (d_valid, 'eval')]
-    model = xgb.train(params, d_train, round_num, evals=watch_list, early_stopping_rounds=200, feval=rmspe_xg)
+    model = xgb.train(params, d_train, round_num, evals=watch_list, feval=rmspe_xg)
 
     if create_submission is False:
         print("Validating...")
@@ -146,42 +127,22 @@ def prediction(output_dir_path, model, feature_names, features_extractor, test_s
     joblib.dump(model, path.join(output_dir_path, "xgb_model.pkl"))
 
 
-def preprocess(training_set, test_set):
-    training_set.fillna(0, inplace=True)
-    training_set = training_set.loc[training_set["Sales"] > 0]
-
-    test_set.loc[test_set.Open.isnull(), 'Open'] = 1
-    test_set.fillna(0, inplace=True)
-
-    return training_set, test_set
-
-
 def run(input_dir_path, external_dir_path, output_dir_path, preds_per_store_path):
 
     create_submission = True if output_dir_path is not None else False
 
     train_path = path.join(input_dir_path, train_filename)
     test_path = path.join(input_dir_path, test_filename)
-    store_path = path.join(input_dir_path, store_filename)
-    store_states_path = path.join(external_dir_path, store_states_filename)
-    state_holidays_path = path.join(external_dir_path, state_holidays_filename)
 
     training_set = pd.read_csv(train_path, parse_dates=[2])
     test_set = pd.read_csv(test_path, parse_dates=[3])
-    store = pd.read_csv(store_path)
-
-    training_set = pd.merge(training_set, store, on="Store", how='left')
-    test_set = pd.merge(test_set, store, on="Store", how='left')
 
     features_extractor = FeaturesExtractor()
     features_extractor.add_feature_set(BasicFeatureSet())
-    features_extractor.add_feature_set(DateFeatureSet())
-    features_extractor.add_feature_set(CompetitionFeatureSet())
-    features_extractor.add_feature_set(PromotionFeatureSet())
-    features_extractor.add_feature_set(DaysNumberToHoliday(store_states_path, state_holidays_path))
-    features_extractor.add_feature_set(PromotionDaysNumber(training_set, test_set))
+    # features_extractor.add_feature_set(DateFeatureSet())
+    # features_extractor.add_feature_set(CompetitionFeatureSet())
+    # features_extractor.add_feature_set(PromotionFeatureSet())
 
-    training_set, test_set = preprocess(training_set, test_set)
     model, feature_names = learning(create_submission, features_extractor, training_set, preds_per_store_path)
     plot_feature_importance(model, feature_names)
     if create_submission:
