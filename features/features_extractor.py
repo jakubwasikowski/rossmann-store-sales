@@ -12,7 +12,7 @@ class FeaturesExtractor:
 
     def extract(self, data_set, feature_names=None):
         feature_set = self._generate_feature_set(data_set)
-        return self._to_sparse_structure(feature_set, feature_names)
+        return feature_set, feature_set.columns.values
 
     def _generate_feature_set(self, data_set):
         print "Generating features..."

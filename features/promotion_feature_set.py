@@ -3,10 +3,6 @@ from features.feature_set import FeatureSet
 
 class PromotionFeatureSet(FeatureSet):
     def generate_features(self, data_set, features):
-        self._rewrite(data_set, features, [
-            "Promo",
-            "Promo2",
-        ], data_type=float)
         months_indexes = {"Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6, "Jul": 7, "Aug": 8, "Sept": 9,
                           "Oct": 10, "Nov": 11, "Dec": 12}
 
@@ -17,10 +13,10 @@ class PromotionFeatureSet(FeatureSet):
 
         features["IsPromoMonth"] = 0
         for interval in data_set.PromoInterval.unique():
-            if interval != 0:
+            if isinstance(interval, str):
                 for month_name in interval.split(','):
                     promo_month = data_set.Date.dt.month == months_indexes[month_name]
                     correct_interval = data_set.PromoInterval == interval
                     promo_started = features.PromoStarted
                     features.loc[promo_month & correct_interval & promo_started, "IsPromoMonth"] = 1
-        features.drop("PromoStarted", 1)
+

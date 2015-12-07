@@ -30,7 +30,7 @@ params = {
     "subsample": 0.9,
     "colsample_bytree": 0.7,
     "silent": 1,
-    "seed": 1301
+    "seed": 1
 }
 round_num = 3000
 
@@ -53,22 +53,25 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
 
     print "Splitting data set..."
     if create_submission:
-        train, valid = non_random_train_test_split(training_set, test_size=submission_eval_set_size)
+        train, valid = cross_validation.train_test_split(training_set, test_size=submission_eval_set_size,
+                                                         random_state=10)
     else:
-        train, valid = non_random_train_test_split(training_set, test_size=eval_and_test_set_size)
+        train, valid = cross_validation.train_test_split(training_set, test_size=eval_and_test_set_size,
+                                                         random_state=10)
         valid, test = cross_validation.train_test_split(valid, test_size=0.5, random_state=10)
 
+    pd.set_option('display.max_columns', None)
+    print train[0:5]
     print "Extracting features for training set..."
-    train_x, feature_names = features_extractor.extract(train)
+    train_x = features_extractor.extract(train)
     train_y = train.Sales
     d_train = xgb.DMatrix(train_x, label=np.log1p(train_y))
-
+    print train_x[0:5]
     print "Extracting features for validation set..."
-    valid_x, _ = features_extractor.extract(valid, feature_names=feature_names)
+    valid_x = features_extractor.extract(valid)
     valid_y = valid.Sales
     d_valid = xgb.DMatrix(valid_x, label=np.log1p(valid_y))
 
-    print "Feature names: %s" % ', '.join(feature_names)
     print "Training xgboost..."
 
     watch_list = [(d_train, 'train'), (d_valid, 'eval')]
@@ -76,7 +79,7 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
 
     if create_submission is False:
         print("Validating...")
-        test_x, _ = features_extractor.extract(test, feature_names=feature_names)
+        test_x = features_extractor.extract(test)
         test_y = test.Sales
 
         train_probs = model.predict(xgb.DMatrix(test_x))
@@ -93,7 +96,7 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
                                    valid_features=valid_x,
                                    model=model)
 
-    return model, feature_names
+    return model
 
 
 def save_predictions_per_store(output_dir, train_set, train_features, valid_set, valid_features, model):
@@ -112,11 +115,11 @@ def save_predictions_per_store(output_dir, train_set, train_features, valid_set,
         df[["Store", "Open", "Promo", "Date", "Sales", "PredSales"]].to_csv(output_path, index=False)
 
 
-def prediction(output_dir_path, model, feature_names, features_extractor, test_set):
+def prediction(output_dir_path, model, features_extractor, test_set):
     print ">> PREDICTION"
 
     print "Extracting features..."
-    test_x, _ = features_extractor.extract(test_set, feature_names=feature_names)
+    test_x = features_extractor.extract(test_set)
 
     print "Predicting..."
     test_probs = model.predict(xgb.DMatrix(test_x))
@@ -139,14 +142,14 @@ def run(input_dir_path, external_dir_path, output_dir_path, preds_per_store_path
 
     features_extractor = FeaturesExtractor()
     features_extractor.add_feature_set(BasicFeatureSet())
-    # features_extractor.add_feature_set(DateFeatureSet())
-    # features_extractor.add_feature_set(CompetitionFeatureSet())
-    # features_extractor.add_feature_set(PromotionFeatureSet())
+    features_extractor.add_feature_set(DateFeatureSet())
+    features_extractor.add_feature_set(CompetitionFeatureSet())
+    features_extractor.add_feature_set(PromotionFeatureSet())
 
-    model, feature_names = learning(create_submission, features_extractor, training_set, preds_per_store_path)
-    plot_feature_importance(model, feature_names)
+    model = learning(create_submission, features_extractor, training_set, preds_per_store_path)
+    # plot_feature_importance(model, feature_names)
     if create_submission:
-        prediction(output_dir_path, model, feature_names, features_extractor, test_set)
+        prediction(output_dir_path, model, features_extractor, test_set)
 
 
 if __name__ == "__main__":
