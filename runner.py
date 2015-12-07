@@ -60,15 +60,14 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
                                                          random_state=10)
         valid, test = cross_validation.train_test_split(valid, test_size=0.5, random_state=10)
 
-    pd.set_option('display.max_columns', None)
     print train[0:5]
     print "Extracting features for training set..."
-    train_x = features_extractor.extract(train)
+    train_x, feature_names = features_extractor.extract(train)
     train_y = train.Sales
     d_train = xgb.DMatrix(train_x, label=np.log1p(train_y))
     print train_x[0:5]
     print "Extracting features for validation set..."
-    valid_x = features_extractor.extract(valid)
+    valid_x, _ = features_extractor.extract(valid)
     valid_y = valid.Sales
     d_valid = xgb.DMatrix(valid_x, label=np.log1p(valid_y))
 
@@ -79,7 +78,7 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
 
     if create_submission is False:
         print("Validating...")
-        test_x = features_extractor.extract(test)
+        test_x, _ = features_extractor.extract(test)
         test_y = test.Sales
 
         train_probs = model.predict(xgb.DMatrix(test_x))
@@ -96,7 +95,7 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
                                    valid_features=valid_x,
                                    model=model)
 
-    return model
+    return model, feature_names
 
 
 def save_predictions_per_store(output_dir, train_set, train_features, valid_set, valid_features, model):
@@ -119,7 +118,7 @@ def prediction(output_dir_path, model, features_extractor, test_set):
     print ">> PREDICTION"
 
     print "Extracting features..."
-    test_x = features_extractor.extract(test_set)
+    test_x, _ = features_extractor.extract(test_set)
 
     print "Predicting..."
     test_probs = model.predict(xgb.DMatrix(test_x))
@@ -144,15 +143,19 @@ def run(input_dir_path, external_dir_path, output_dir_path, preds_per_store_path
     features_extractor.add_feature_set(BasicFeatureSet())
     features_extractor.add_feature_set(DateFeatureSet())
     features_extractor.add_feature_set(CompetitionFeatureSet())
-    features_extractor.add_feature_set(PromotionFeatureSet())
+    # Exclude PromotionFeatureSet due to seemingly poor results
+    # features_extractor.add_feature_set(PromotionFeatureSet())
 
-    model = learning(create_submission, features_extractor, training_set, preds_per_store_path)
-    # plot_feature_importance(model, feature_names)
+
+    model, feature_names = learning(create_submission, features_extractor, training_set, preds_per_store_path)
+    plot_feature_importance(model, feature_names)
     if create_submission:
         prediction(output_dir_path, model, features_extractor, test_set)
 
 
 if __name__ == "__main__":
+    pd.set_option('display.max_columns', None)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_dir", default="data")
     parser.add_argument("--external_dir", default="external")

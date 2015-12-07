@@ -10,10 +10,9 @@ class FeaturesExtractor:
     def add_feature_set(self, feature_set):
         self._feature_set_generators.append(feature_set)
 
-    def extract(self, data_set, feature_names=None):
-        # TODO add feature names to return statement to enable feature importance calculation
+    def extract(self, data_set):
         feature_set = self._generate_feature_set(data_set)
-        return feature_set
+        return feature_set, feature_set.columns.values
 
     def _generate_feature_set(self, data_set):
         print "Generating features..."
