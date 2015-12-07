@@ -1,10 +1,12 @@
+import numpy as np
 from collections import OrderedDict
 import pandas as pd
 from scipy import sparse
 
 
 class FeaturesExtractor:
-    def __init__(self):
+    def __init__(self, missing_value):
+        self._missing_value = missing_value
         self._feature_set_generators = []
 
     def add_feature_set(self, feature_set):
@@ -12,6 +14,8 @@ class FeaturesExtractor:
 
     def extract(self, data_set, feature_names=None):
         feature_set = self._generate_feature_set(data_set)
+        feature_set.to_csv("feature_set.csv")
+        data_set.to_csv("data_set.csv")
         return self._to_sparse_structure(feature_set, feature_names)
 
     def _generate_feature_set(self, data_set):
@@ -38,10 +42,14 @@ class FeaturesExtractor:
             if (rows_no + 1) % 10000 == 0:
                 print "Percentage of converted rows: %.1f%%" % (float(rows_no) * 100 / len(feature_set))
             for q_col in quantitative_columns:
+                val = fs_row[q_col]
+                if val == self._missing_value:
+                    raise ValueError("Value reserved for missing values has been found in \"%s\". Please use np.nan."
+                                     % q_col)
                 self._update_feature_indexes(features_indexes, q_col)
                 row.append(rows_no)
                 col.append(features_indexes[q_col])
-                data.append(fs_row[q_col])
+                data.append(val if not np.isnan(val) else self._missing_value)
             for c_col in categorical_columns:
                 one_hot_encoded_c_col = "%s=%s" % (c_col, str(fs_row[c_col]))
                 self._update_feature_indexes(features_indexes, one_hot_encoded_c_col)

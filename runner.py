@@ -12,8 +12,10 @@ from features.competition_feature_set import CompetitionFeatureSet
 from features.date_feature_set import DateFeatureSet
 from features.days_number_to_holiday import DaysNumberToHoliday
 from features.features_extractor import FeaturesExtractor
+from features.promo_feature_set import PromoFeatureSet
 from features.promotion_days_number import PromotionDaysNumber
 from features.promotion_feature_set import PromotionFeatureSet
+from features.store_state import StoreState
 from helpers.cross_validation import non_random_train_test_split
 from helpers.feature_importance import plot_feature_importance
 
@@ -25,19 +27,20 @@ store_states_filename = 'store_states.csv'
 
 params = {
     "objective": "reg:linear",
-    "booster": "gbtree",
-    "eta": 0.1,
-    "max_depth": 10,
-    "subsample": 0.85,
-    "colsample_bytree": 0.4,
-    "min_child_weight": 6,
+    "booster" : "gbtree",
+    "eta": 0.05,
+    "max_depth": 13,
+    "subsample": 0.7,
+    "colsample_bytree": 0.6,
     "silent": 1,
     "seed": 1301
-}
-round_num = 10000
+  }
+round_num = 20000
 
 eval_and_test_set_size = 0.2
 submission_eval_set_size = 0.012
+
+missing_value = -1.
 
 
 def rmspe(yhat, y):
@@ -80,12 +83,12 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
     print "Extracting features for training set..."
     train_x, feature_names = features_extractor.extract(train)
     train_y = train.Sales
-    d_train = xgb.DMatrix(train_x, label=np.log1p(train_y))
+    d_train = xgb.DMatrix(train_x, label=np.log1p(train_y), missing=missing_value)
 
     print "Extracting features for validation set..."
     valid_x, _ = features_extractor.extract(valid, feature_names=feature_names)
     valid_y = valid.Sales
-    d_valid = xgb.DMatrix(valid_x, label=np.log1p(valid_y))
+    d_valid = xgb.DMatrix(valid_x, label=np.log1p(valid_y), missing=missing_value)
 
     print "Feature names: %s" % ', '.join(feature_names)
     print "Training xgboost..."
@@ -98,7 +101,7 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
         test_x, _ = features_extractor.extract(test, feature_names=feature_names)
         test_y = test.Sales
 
-        train_probs = model.predict(xgb.DMatrix(test_x))
+        train_probs = model.predict(xgb.DMatrix(test_x, missing=missing_value))
         indices = train_probs < 0
         train_probs[indices] = 0
         error = rmspe(np.expm1(train_probs), test_y.values)
@@ -118,9 +121,9 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
 def save_predictions_per_store(output_dir, train_set, train_features, valid_set, valid_features, model):
     print ">> SAVING PREDICTIONS PER STORE"
     train = pd.DataFrame(train_set)
-    train["PredSales"] = np.expm1(model.predict(xgb.DMatrix(train_features)))
+    train["PredSales"] = np.expm1(model.predict(xgb.DMatrix(train_features, missing=missing_value)))
     valid = pd.DataFrame(valid_set)
-    valid["PredSales"] = np.expm1(model.predict(xgb.DMatrix(valid_features)))
+    valid["PredSales"] = np.expm1(model.predict(xgb.DMatrix(valid_features, missing=missing_value)))
 
     train = train.iloc[::-1]
     valid = valid.iloc[::-1]
@@ -138,7 +141,7 @@ def prediction(output_dir_path, model, feature_names, features_extractor, test_s
     test_x, _ = features_extractor.extract(test_set, feature_names=feature_names)
 
     print "Predicting..."
-    test_probs = model.predict(xgb.DMatrix(test_x))
+    test_probs = model.predict(xgb.DMatrix(test_x, missing=missing_value))
     indices = test_probs < 0
     test_probs[indices] = 0
     submission = pd.DataFrame({"Id": test_set["Id"], "Sales": np.expm1(test_probs)})
@@ -147,11 +150,11 @@ def prediction(output_dir_path, model, feature_names, features_extractor, test_s
 
 
 def preprocess(training_set, test_set):
-    training_set.fillna(0, inplace=True)
+    # training_set.fillna(0, inplace=True)
     training_set = training_set.loc[training_set["Sales"] > 0]
 
     test_set.loc[test_set.Open.isnull(), 'Open'] = 1
-    test_set.fillna(0, inplace=True)
+    # test_set.fillna(0, inplace=True)
 
     return training_set, test_set
 
@@ -173,13 +176,17 @@ def run(input_dir_path, external_dir_path, output_dir_path, preds_per_store_path
     training_set = pd.merge(training_set, store, on="Store", how='left')
     test_set = pd.merge(test_set, store, on="Store", how='left')
 
-    features_extractor = FeaturesExtractor()
+    features_extractor = FeaturesExtractor(missing_value)
     features_extractor.add_feature_set(BasicFeatureSet())
     features_extractor.add_feature_set(DateFeatureSet())
     features_extractor.add_feature_set(CompetitionFeatureSet())
-    features_extractor.add_feature_set(PromotionFeatureSet())
+    features_extractor.add_feature_set(PromoFeatureSet(training_set, test_set))
+    features_extractor.add_feature_set(StoreState(store_states_path))
     features_extractor.add_feature_set(DaysNumberToHoliday(store_states_path, state_holidays_path))
-    features_extractor.add_feature_set(PromotionDaysNumber(training_set, test_set))
+
+    # features_extractor.add_feature_set(PromotionFeatureSet())
+    # features_extractor.add_feature_set(DaysNumberToHoliday(store_states_path, state_holidays_path))
+    # features_extractor.add_feature_set(PromotionDaysNumber(training_set, test_set))
 
     training_set, test_set = preprocess(training_set, test_set)
     model, feature_names = learning(create_submission, features_extractor, training_set, preds_per_store_path)
