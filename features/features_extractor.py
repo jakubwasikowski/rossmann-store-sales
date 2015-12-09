@@ -1,6 +1,6 @@
-from collections import OrderedDict
 import pandas as pd
-from scipy import sparse
+
+from sklearn.feature_extraction import DictVectorizer
 
 
 class FeaturesExtractor:
@@ -10,9 +10,22 @@ class FeaturesExtractor:
     def add_feature_set(self, feature_set):
         self._feature_set_generators.append(feature_set)
 
-    def extract(self, data_set):
+    def extract(self, data_set, dict_vectorizer=None):
         feature_set = self._generate_feature_set(data_set)
-        return feature_set, feature_set.columns.values
+
+        final_examples = []
+        for fs_index, fs_row in feature_set.iterrows():
+            example = dict(fs_row)
+            example['DayNominal'] = str(example['Day'])
+            example['WeekOfYearNominal'] = str(example['WeekOfYear'])
+            example['DayOfWeekNominal'] = str(example['DayOfWeek'])
+            final_examples.append(example)
+
+        if dict_vectorizer is None:
+            dict_vectorizer = DictVectorizer().fit(final_examples)
+
+        feature_set = dict_vectorizer.transform(final_examples)
+        return feature_set, dict_vectorizer
 
     def _generate_feature_set(self, data_set):
         print "Generating features..."

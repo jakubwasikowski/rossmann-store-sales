@@ -60,14 +60,15 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
                                                          random_state=10)
         valid, test = cross_validation.train_test_split(valid, test_size=0.5, random_state=10)
 
-    print train[0:5]
     print "Extracting features for training set..."
-    train_x, feature_names = features_extractor.extract(train)
+    train_x, dict_vectorizer = features_extractor.extract(train)
     train_y = train.Sales
     d_train = xgb.DMatrix(train_x, label=np.log1p(train_y))
-    print train_x[0:5]
+
+    feature_names = get_feature_names(dict_vectorizer)
+
     print "Extracting features for validation set..."
-    valid_x, _ = features_extractor.extract(valid)
+    valid_x, _ = features_extractor.extract(valid, dict_vectorizer)
     valid_y = valid.Sales
     d_valid = xgb.DMatrix(valid_x, label=np.log1p(valid_y))
 
@@ -78,7 +79,7 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
 
     if create_submission is False:
         print("Validating...")
-        test_x, _ = features_extractor.extract(test)
+        test_x, _ = features_extractor.extract(test, dict_vectorizer)
         test_y = test.Sales
 
         train_probs = model.predict(xgb.DMatrix(test_x))
@@ -96,6 +97,11 @@ def learning(create_submission, features_extractor, training_set, preds_per_stor
                                    model=model)
 
     return model, feature_names
+
+
+def get_feature_names(dict_vectorizer):
+    features_mapping = {v: k for k, v in dict_vectorizer.vocabulary_.items()}
+    return [features_mapping[key] for key in sorted(features_mapping)]
 
 
 def save_predictions_per_store(output_dir, train_set, train_features, valid_set, valid_features, model):
@@ -145,7 +151,6 @@ def run(input_dir_path, external_dir_path, output_dir_path, preds_per_store_path
     features_extractor.add_feature_set(CompetitionFeatureSet())
     # Exclude PromotionFeatureSet due to seemingly poor results
     # features_extractor.add_feature_set(PromotionFeatureSet())
-
 
     model, feature_names = learning(create_submission, features_extractor, training_set, preds_per_store_path)
     plot_feature_importance(model, feature_names)
